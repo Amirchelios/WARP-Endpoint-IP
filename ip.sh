@@ -29,39 +29,44 @@ archAffix(){
 }
 
 endpointyx() {
-    # دانلود ابزار بررسی IP و اجرای آن
     wget https://raw.githubusercontent.com/Amirchelios/WARP-Endpoint-IP/main/files/warp-linux-$(archAffix) -O warp
     ulimit -n 102400
     chmod +x warp && ./warp >/dev/null 2>&1
 
-    # لیست کشورهایی که فقط از هرکدوم یک IP می‌خوایم
     target_countries=("US" "DE" "GB" "NL" "AE")
     declare -A selected
 
     green "🔍 Selecting best IPs from desired countries..."
     
-    while IFS=, read -r ip loss delay; do
-        [[ "$delay" == "timeout ms" ]] && continue
+    tail -n +2 result.csv | awk -F, '$3!="timeout ms"' | sort -t, -nk2 -nk3 | uniq | while IFS=, read -r ipport loss delay; do
+        ip="${ipport%%:*}"  # ← جدا کردن IP از PORT
 
-        # دریافت کد کشور از IP
-        country=$(curl -s "http://ip-api.com/json/$ip" | jq -r '.countryCode')
-        if [[ " ${target_countries[*]} " == *" $country "* ]] && [[ -z "${selected[$country]}" ]]; then
-            selected[$country]="$ip"
-            echo -e "[$country] $ip (Loss: $loss, Delay: $delay)"
+        echo "🔎 Testing IP: $ip..."
+        country=$(curl -s --max-time 3 "http://ip-api.com/json/$ip" | jq -r '.countryCode')
+
+        if [[ -z "$country" || "$country" == "null" ]]; then
+            echo "  ↪ ⚠️ Failed to get country for $ip"
+            continue
         fi
 
-        # اگر همه کشورها پر شدند، متوقف شو
+        echo "  ↪ 📍 $ip is from $country"
+        if [[ " ${target_countries[*]} " == *" $country "* ]] && [[ -z "${selected[$country]}" ]]; then
+            selected[$country]="$ip"
+            echo -e "✅ [$country] $ip (Loss: $loss, Delay: $delay)"
+        fi
+
         if [[ ${#selected[@]} -eq ${#target_countries[@]} ]]; then
             break
         fi
-    done < <(cat result.csv | awk -F, '$3!="timeout ms" {print}' | sort -t, -nk2 -nk3 | uniq)
+    done
 
     echo ""
     yellow "💡 You can replace engage.cloudflareclient.com:2408 with one of the above IPs in your WireGuard config."
 
-    # حذف ابزار
     rm -f warp ip.txt
 }
+
+
 endpoint4() {
 
 	# Generate a list of preferred WARP IPv4 Endpoint IP segments
