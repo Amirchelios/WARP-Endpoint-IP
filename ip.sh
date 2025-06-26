@@ -29,26 +29,39 @@ archAffix(){
 }
 
 endpointyx() {
-	# Download the preferred tool software, thanks to an anonymous netizen for sharing the preferred tool
-	wget https://raw.githubusercontent.com/TheyCallMeSecond/WARP-Endpoint-IP/main/files/warp-linux-$(archAffix) -O warp
+    # دانلود ابزار بررسی IP و اجرای آن
+    wget https://raw.githubusercontent.com/TheyCallMeSecond/WARP-Endpoint-IP/main/files/warp-linux-$(archAffix) -O warp
+    ulimit -n 102400
+    chmod +x warp && ./warp >/dev/null 2>&1
 
-	# Cancel the thread limit that comes with Linux to generate the preferred Endpoint IP
-	ulimit -n 102400
+    # لیست کشورهایی که فقط از هرکدوم یک IP می‌خوایم
+    target_countries=("US" "DE" "GB" "NL" "AE")
+    declare -A selected
 
-	# Start the WARP Endpoint IP optimization tool
-	chmod +x warp && ./warp >/dev/null 2>&1
+    green "🔍 Selecting best IPs from desired countries..."
+    
+    while IFS=, read -r ip loss delay; do
+        [[ "$delay" == "timeout ms" ]] && continue
 
-	# Display the top ten preferred Endpoint IPs and how to use them
-	green "The current optimal Endpoint IP results are as follows and have been saved to result.csv:"
-	cat result.csv | awk -F, '$3!="timeout ms" {print} ' | sort -t, -nk2 -nk3 | uniq | head -11 | awk -F, '{print "Endpoint "$1" Packet loss rate "$2" Average delay "$3}'
-	echo ""
-	yellow "How to use it:"
-	yellow "1. Replace the default Endpoint IP of the WireGuard node: engage.cloudflareclient.com:2408 with the optimal Endpoint IP of the local network"
+        # دریافت کد کشور از IP
+        country=$(curl -s "http://ip-api.com/json/$ip" | jq -r '.countryCode')
+        if [[ " ${target_countries[*]} " == *" $country "* ]] && [[ -z "${selected[$country]}" ]]; then
+            selected[$country]="$ip"
+            echo -e "[$country] $ip (Loss: $loss, Delay: $delay)"
+        fi
 
-	# Delete the WARP Endpoint IP preferred tool and its accompanying files
-	rm -f warp ip.txt
+        # اگر همه کشورها پر شدند، متوقف شو
+        if [[ ${#selected[@]} -eq ${#target_countries[@]} ]]; then
+            break
+        fi
+    done < <(cat result.csv | awk -F, '$3!="timeout ms" {print}' | sort -t, -nk2 -nk3 | uniq)
+
+    echo ""
+    yellow "💡 You can replace engage.cloudflareclient.com:2408 with one of the above IPs in your WireGuard config."
+
+    # حذف ابزار
+    rm -f warp ip.txt
 }
-
 endpoint4() {
 
 	# Generate a list of preferred WARP IPv4 Endpoint IP segments
