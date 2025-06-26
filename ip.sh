@@ -33,41 +33,41 @@ endpointyx() {
     ulimit -n 102400
     chmod +x warp && ./warp >/dev/null 2>&1
 
-    green "🌍 Processing optimized IPs with location info..."
+    green "🌍 Displaying filtered and randomized IPs with location info..."
 
-    declare -A country_map
-
+    # خروجی فیلتر شده رو به صورت موقت در فایل می‌نویسیم
     tail -n +2 result.csv | awk -F, '$3!="timeout ms"' | while IFS=, read -r ipport loss delay; do
         ip="${ipport%%:*}"
-
-        # پاک کردن % از loss و ms از delay
         loss_clean=$(echo "$loss" | tr -d '%')
-        delay_clean=$(echo "$delay" | grep -oE '[0-9]+')
+        delay_clean=$(echo "$delay" | awk '{print $1}')
 
-        # فقط اگر loss شروع با 0 و delay < 200ms
-        if [[ "$loss_clean" =~ ^0 ]] && [[ "$delay_clean" -lt 30 ]]; then
-            country=$(curl -s --max-time 3 "http://ip-api.com/json/$ip" | jq -r '.countryCode')
-            if [[ "$country" == "null" || -z "$country" ]]; then
-                country="??"
-                echo "⚠️ Failed to get country for $ip"
-            fi
-            country_map["$country"]+="$ipport,$loss,$delay_clean ms"$'\n'
+        # فیلتر: فقط پکت‌لاس صفر و تأخیر کمتر از 50
+        if [[ "$loss_clean" == "0.00" && "$delay_clean" -lt 50 ]]; then
+            echo "$ipport,$loss,$delay" >> /tmp/filtered_results.txt
         fi
     done
 
-    echo ""
-    green "🚀 Displaying top 2 fastest IPs per country:"
-    for country in "${!country_map[@]}"; do
-        echo "${country_map[$country]}" | sort -t',' -k3 -n | head -n 2 | while IFS=, read -r ipport loss delay; do
-            echo -e "🌐 [$country] $ipport (Loss: $loss, Delay: $delay)"
-        done
+    # اگر چیزی پیدا نشده بود
+    if [[ ! -s /tmp/filtered_results.txt ]]; then
+        red "❌ No suitable IPs found (check loss and delay thresholds)"
+        rm -f warp ip.txt /tmp/filtered_results.txt
+        return
+    fi
+
+    # نمایش رندوم‌شده آی‌پی‌ها با لوکیشن
+    shuf /tmp/filtered_results.txt | while IFS=, read -r ipport loss delay; do
+        ip="${ipport%%:*}"
+        country=$(curl -s --max-time 3 "http://ip-api.com/json/$ip" | jq -r '.countryCode')
+        [[ "$country" == "null" || -z "$country" ]] && country="??"
+        echo -e "🌐 [$country] $ipport (Loss: $loss, Delay: $delay)"
     done
 
     echo ""
-    yellow "💡 You can use the IPs above in your WireGuard config (engage.cloudflareclient.com:PORT)."
+    yellow "💡 Use the selected IPs to replace engage.cloudflareclient.com:2408 in your config."
 
-    rm -f warp ip.txt
+    rm -f warp ip.txt /tmp/filtered_results.txt
 }
+
 
 endpoint4() {
 
