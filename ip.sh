@@ -29,7 +29,7 @@ archAffix(){
 }
 
 endpointyx() {
-    wget https://raw.githubusercontent.com/Amirchelios/WARP-Endpoint-IP/main/files/warp-linux-$(archAffix) -O warp
+    wget https://raw.githubusercontent.com/TheyCallMeSecond/WARP-Endpoint-IP/main/files/warp-linux-$(archAffix) -O warp
     ulimit -n 102400
     chmod +x warp && ./warp >/dev/null 2>&1
 
@@ -37,16 +37,21 @@ endpointyx() {
 
     declare -A country_map
 
-    # فیلتر اولیه: فقط IPهایی با 0% پکت لاس و delay معتبر
     tail -n +2 result.csv | awk -F, '$3!="timeout ms"' | while IFS=, read -r ipport loss delay; do
         ip="${ipport%%:*}"
-        loss_clean=$(echo "$loss" | tr -d '%')
-        delay_clean=$(echo "$delay" | awk '{print $1}')
 
-        if [[ "$loss_clean" == "0.00" && "$delay_clean" -lt 20 ]]; then
+        # پاک کردن % از loss و ms از delay
+        loss_clean=$(echo "$loss" | tr -d '%')
+        delay_clean=$(echo "$delay" | grep -oE '[0-9]+')
+
+        # فقط اگر loss شروع با 0 و delay < 200ms
+        if [[ "$loss_clean" =~ ^0 ]] && [[ "$delay_clean" -lt 30 ]]; then
             country=$(curl -s --max-time 3 "http://ip-api.com/json/$ip" | jq -r '.countryCode')
-            [[ "$country" == "null" || -z "$country" ]] && country="??"
-            country_map["$country"]+="$ipport,$loss,$delay"$'\n'
+            if [[ "$country" == "null" || -z "$country" ]]; then
+                country="??"
+                echo "⚠️ Failed to get country for $ip"
+            fi
+            country_map["$country"]+="$ipport,$loss,$delay_clean ms"$'\n'
         fi
     done
 
@@ -63,10 +68,6 @@ endpointyx() {
 
     rm -f warp ip.txt
 }
-
-
-
-
 
 endpoint4() {
 
