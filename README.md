@@ -2,5 +2,5 @@
 WARP Endpoint IP one-click optimization script
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/TheyCallMeSecond/WARP-Endpoint-IP/main/ip.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/Amirchelios/WARP-Endpoint-IP/main/ip.sh)
 ```
