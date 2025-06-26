@@ -35,52 +35,35 @@ endpointyx() {
 
     green "🔍 Collecting location info for all tested IPs..."
 
-    declare -A country_ips
-    declare -A selected
-    target_per_country=2
+    declare -A country_list
+    max_per_country=2
     max_countries=4
 
-    # حذف هدر و شروع بررسی IPها
-    tail -n +2 result.csv | awk -F, '$3!="timeout ms"' | sort -t, -nk2 -nk3 | uniq | while IFS=, read -r ipport loss delay; do
+    tail -n +2 result.csv | awk -F, '$3!="timeout ms"' | while IFS=, read -r ipport loss delay; do
         ip="${ipport%%:*}"
+        geo=$(curl -s --max-time 3 "http://ip-api.com/json/$ip")
+        country=$(echo "$geo" | jq -r '.countryCode')
+        [[ "$country" == "null" || -z "$country" ]] && continue
 
-        country=$(curl -s --max-time 3 "http://ip-api.com/json/$ip" | jq -r '.countryCode')
-        [[ -z "$country" || "$country" == "null" ]] && continue
-
-        # اضافه به لیست موقت کشورها
-        country_ips["$country"]+="$ip,$loss,$delay"$'\n'
+        entry="$ipport,$loss,$delay"
+        country_list["$country"]+="$entry"$'\n'
     done
 
-    echo ""
-    green "🎲 Randomly selecting $target_per_country IPs from up to $max_countries countries..."
+    green "🎲 Randomly selecting $max_per_country IPs from up to $max_countries countries..."
 
     count=0
-    for country in "${!country_ips[@]}"; do
-        # استخراج IPهای مربوط به اون کشور
-        ips_data=$(echo "${country_ips[$country]}" | grep .)
-        ip_lines=()
-        while IFS= read -r line; do
-            ip_lines+=("$line")
-        done <<< "$ips_data"
+    for country in "${!country_list[@]}"; do
+        IFS=$'\n' read -r -d '' -a lines < <(printf "%s" "${country_list[$country]}" | grep . | shuf -n "$max_per_country"; printf '\0')
 
-        # اگر کمتر از 2 IP، رد شو
-        if [[ ${#ip_lines[@]} -lt $target_per_country ]]; then
-            continue
-        fi
-
-        # انتخاب تصادفی 2 آی‌پی از لیست آن کشور
-        selected_lines=($(shuf -e "${ip_lines[@]}" -n $target_per_country))
-        for sel in "${selected_lines[@]}"; do
-            ip=$(echo "$sel" | cut -d',' -f1)
-            loss=$(echo "$sel" | cut -d',' -f2)
-            delay=$(echo "$sel" | cut -d',' -f3)
-            echo -e "✅ [$country] $ip (Loss: $loss, Delay: $delay)"
+        for line in "${lines[@]}"; do
+            ipport=$(echo "$line" | cut -d',' -f1)
+            loss=$(echo "$line" | cut -d',' -f2)
+            delay=$(echo "$line" | cut -d',' -f3)
+            echo -e "✅ [$country] $ipport (Loss: $loss, Delay: $delay)"
         done
 
         ((count++))
-        if [[ $count -ge $max_countries ]]; then
-            break
-        fi
+        [[ $count -ge $max_countries ]] && break
     done
 
     echo ""
@@ -88,6 +71,7 @@ endpointyx() {
 
     rm -f warp ip.txt
 }
+
 
 
 
