@@ -29,44 +29,41 @@ archAffix(){
 }
 
 endpointyx() {
-    wget https://raw.githubusercontent.com/TheyCallMeSecond/WARP-Endpoint-IP/main/files/warp-linux-$(archAffix) -O warp
+    wget https://raw.githubusercontent.com/Amirchelios/WARP-Endpoint-IP/main/files/warp-linux-$(archAffix) -O warp
     ulimit -n 102400
     chmod +x warp && ./warp >/dev/null 2>&1
 
-    green "🌍 Displaying filtered and randomized IPs with location info..."
+    green "🌍 Processing optimized IPs with location info..."
 
-    # خروجی فیلتر شده رو به صورت موقت در فایل می‌نویسیم
+    declare -A country_map
+
+    # فیلتر اولیه: فقط IPهایی با 0% پکت لاس و delay معتبر
     tail -n +2 result.csv | awk -F, '$3!="timeout ms"' | while IFS=, read -r ipport loss delay; do
         ip="${ipport%%:*}"
         loss_clean=$(echo "$loss" | tr -d '%')
         delay_clean=$(echo "$delay" | awk '{print $1}')
 
-        # فیلتر: فقط پکت‌لاس صفر و تأخیر کمتر از 50
-        if [[ "$loss_clean" == "0.00" && "$delay_clean" -lt 50 ]]; then
-            echo "$ipport,$loss,$delay" >> /tmp/filtered_results.txt
+        if [[ "$loss_clean" == "0.00" && "$delay_clean" -lt 20 ]]; then
+            country=$(curl -s --max-time 3 "http://ip-api.com/json/$ip" | jq -r '.countryCode')
+            [[ "$country" == "null" || -z "$country" ]] && country="??"
+            country_map["$country"]+="$ipport,$loss,$delay"$'\n'
         fi
     done
 
-    # اگر چیزی پیدا نشده بود
-    if [[ ! -s /tmp/filtered_results.txt ]]; then
-        red "❌ No suitable IPs found (check loss and delay thresholds)"
-        rm -f warp ip.txt /tmp/filtered_results.txt
-        return
-    fi
-
-    # نمایش رندوم‌شده آی‌پی‌ها با لوکیشن
-    shuf /tmp/filtered_results.txt | while IFS=, read -r ipport loss delay; do
-        ip="${ipport%%:*}"
-        country=$(curl -s --max-time 3 "http://ip-api.com/json/$ip" | jq -r '.countryCode')
-        [[ "$country" == "null" || -z "$country" ]] && country="??"
-        echo -e "🌐 [$country] $ipport (Loss: $loss, Delay: $delay)"
+    echo ""
+    green "🚀 Displaying top 2 fastest IPs per country:"
+    for country in "${!country_map[@]}"; do
+        echo "${country_map[$country]}" | sort -t',' -k3 -n | head -n 2 | while IFS=, read -r ipport loss delay; do
+            echo -e "🌐 [$country] $ipport (Loss: $loss, Delay: $delay)"
+        done
     done
 
     echo ""
-    yellow "💡 Use the selected IPs to replace engage.cloudflareclient.com:2408 in your config."
+    yellow "💡 You can use the IPs above in your WireGuard config (engage.cloudflareclient.com:PORT)."
 
-    rm -f warp ip.txt /tmp/filtered_results.txt
+    rm -f warp ip.txt
 }
+
 
 
 
