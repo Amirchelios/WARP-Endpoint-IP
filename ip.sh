@@ -33,41 +33,19 @@ endpointyx() {
     ulimit -n 102400
     chmod +x warp && ./warp >/dev/null 2>&1
 
-    green "🔍 Collecting location info for all tested IPs..."
+    green "🌍 Displaying all optimized IPs with country info:"
+    echo ""
 
-    declare -A country_list
-    max_per_country=2
-    max_countries=4
-
-    tail -n +2 result.csv | awk -F, '$3!="timeout ms"' | while IFS=, read -r ipport loss delay; do
+    tail -n +2 result.csv | awk -F, '$3!="timeout ms"' | sort -t, -nk2 -nk3 | uniq | while IFS=, read -r ipport loss delay; do
         ip="${ipport%%:*}"
-        geo=$(curl -s --max-time 3 "http://ip-api.com/json/$ip")
-        country=$(echo "$geo" | jq -r '.countryCode')
-        [[ "$country" == "null" || -z "$country" ]] && continue
+        country=$(curl -s --max-time 3 "http://ip-api.com/json/$ip" | jq -r '.countryCode')
+        [[ "$country" == "null" || -z "$country" ]] && country="??"
 
-        entry="$ipport,$loss,$delay"
-        country_list["$country"]+="$entry"$'\n'
-    done
-
-    green "🎲 Randomly selecting $max_per_country IPs from up to $max_countries countries..."
-
-    count=0
-    for country in "${!country_list[@]}"; do
-        IFS=$'\n' read -r -d '' -a lines < <(printf "%s" "${country_list[$country]}" | grep . | shuf -n "$max_per_country"; printf '\0')
-
-        for line in "${lines[@]}"; do
-            ipport=$(echo "$line" | cut -d',' -f1)
-            loss=$(echo "$line" | cut -d',' -f2)
-            delay=$(echo "$line" | cut -d',' -f3)
-            echo -e "✅ [$country] $ipport (Loss: $loss, Delay: $delay)"
-        done
-
-        ((count++))
-        [[ $count -ge $max_countries ]] && break
+        echo -e "🌐 [$country] $ipport (Loss: $loss, Delay: $delay)"
     done
 
     echo ""
-    yellow "💡 Use the selected IPs to replace engage.cloudflareclient.com:2408 in your config."
+    yellow "💡 You can replace engage.cloudflareclient.com:2408 with one of the above IPs in your WireGuard config."
 
     rm -f warp ip.txt
 }
