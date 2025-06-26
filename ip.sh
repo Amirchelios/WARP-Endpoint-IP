@@ -29,25 +29,43 @@ archAffix(){
 }
 
 endpointyx() {
-    wget https://raw.githubusercontent.com/Amirchelios/WARP-Endpoint-IP/main/files/warp-linux-$(archAffix) -O warp
+    wget https://raw.githubusercontent.com/TheyCallMeSecond/WARP-Endpoint-IP/main/files/warp-linux-$(archAffix) -O warp
     ulimit -n 102400
     chmod +x warp && ./warp >/dev/null 2>&1
 
-    green "🌍 Displaying all optimized IPs with country info:"
-    echo ""
+    green "🌍 Displaying filtered and randomized IPs with location info..."
 
-    tail -n +2 result.csv | awk -F, '$3!="timeout ms"' | sort -t, -nk2 -nk3 | uniq | while IFS=, read -r ipport loss delay; do
+    # خروجی فیلتر شده رو به صورت موقت در فایل می‌نویسیم
+    tail -n +2 result.csv | awk -F, '$3!="timeout ms"' | while IFS=, read -r ipport loss delay; do
+        ip="${ipport%%:*}"
+        loss_clean=$(echo "$loss" | tr -d '%')
+        delay_clean=$(echo "$delay" | awk '{print $1}')
+
+        # فیلتر: فقط پکت‌لاس صفر و تأخیر کمتر از 50
+        if [[ "$loss_clean" == "0.00" && "$delay_clean" -lt 50 ]]; then
+            echo "$ipport,$loss,$delay" >> /tmp/filtered_results.txt
+        fi
+    done
+
+    # اگر چیزی پیدا نشده بود
+    if [[ ! -s /tmp/filtered_results.txt ]]; then
+        red "❌ No suitable IPs found (check loss and delay thresholds)"
+        rm -f warp ip.txt /tmp/filtered_results.txt
+        return
+    fi
+
+    # نمایش رندوم‌شده آی‌پی‌ها با لوکیشن
+    shuf /tmp/filtered_results.txt | while IFS=, read -r ipport loss delay; do
         ip="${ipport%%:*}"
         country=$(curl -s --max-time 3 "http://ip-api.com/json/$ip" | jq -r '.countryCode')
         [[ "$country" == "null" || -z "$country" ]] && country="??"
-
         echo -e "🌐 [$country] $ipport (Loss: $loss, Delay: $delay)"
     done
 
     echo ""
-    yellow "💡 You can replace engage.cloudflareclient.com:2408 with one of the above IPs in your WireGuard config."
+    yellow "💡 Use the selected IPs to replace engage.cloudflareclient.com:2408 in your config."
 
-    rm -f warp ip.txt
+    rm -f warp ip.txt /tmp/filtered_results.txt
 }
 
 
