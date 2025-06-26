@@ -30,7 +30,7 @@ archAffix(){
 
 endpointyx() {
     # دانلود ابزار بررسی IP و اجرای آن
-    wget https://raw.githubusercontent.com/TheyCallMeSecond/WARP-Endpoint-IP/main/files/warp-linux-$(archAffix) -O warp
+    wget https://raw.githubusercontent.com/Amirchelios/WARP-Endpoint-IP/main/files/warp-linux-$(archAffix) -O warp
     ulimit -n 102400
     chmod +x warp && ./warp >/dev/null 2>&1
 
